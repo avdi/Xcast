@@ -2,59 +2,66 @@
 require 'pathname'
 require 'highline/system_extensions'
 require 'optparse'
+require 'open3'
 
 xinit_file        = (Pathname(__FILE__).dirname + "xinit").expand_path
 use_xephyr        = false
 root_display      = ENV['DISPLAY']
-record_display    = root_display
+$record_display   = root_display
 xephyr_display    = ":5.0"
 xephyr_env        = {}
 xephyr_bin        = (Pathname(__FILE__).dirname + "xephyr-bin").expand_path
 xephyr_path       = "#{xephyr_bin}:#{ENV['PATH']}"
-full              = false
-default_codecs    = true
+$full             = false
+$default_codecs   = true
 basename          = "screencast-" + Time.now.strftime("%Y%m%d-%H%M")
 dirname           = Pathname("#{ENV['HOME']}/screencasts")
-filename          = dirname + Pathname("#{basename}.mp4")
-thread_count      = 6
-fps               = 15
-width             = 1280
-height            = 720
-x                 = 500
-y                 = 300
-audio_input       = "pulse"
-format            = "x11grab"
+$filename         = dirname + Pathname("#{basename}.mp4")
+$thread_count     = 6
+$fps              = 15
+$width            = 960
+$height           = 600
+$x                = 500
+$y                = 300
+$audio_input      = "pulse"
+$format           = "x11grab"
 video_codec       = "mpeg4"
 video_preset      = "lossless_ultrafast"
 audio_codec       = "pcm_s16le"
 pick              = false
 delay_seconds     = 0
 show              = false
+wait              = false
 
 OptionParser.new do |opts|
   opts.on("-f", "--[no-]full") do |value|
-    full = value
+    $full = value
   end
+
+  opts.on("--[no-]wait") do |value|
+    wait = value
+  end
+
 
   opts.on("-p", "--pick") do |value|
     pick = value
   end
 
   opts.on("-x=N", Integer, "Horizontal offset") do |value|
-    x = value
+    $x = value
   end
 
   opts.on("-y=N", Integer, "Vertical offset") do |value|
-    y = value
+    $y = value
   end
 
   opts.on("-w", "--width", Integer, "Recording area width") do |value|
-    width = value
+    $width = value
   end
 
   opts.on("-h", "--height", Integer, "Recording area height") do
     |value|
-    height = value
+    $height = value
   end
 
   opts.on("--xephyr", "Use X server in a window") do |value|
@@ -81,14 +88,14 @@ OptionParser.new do |opts|
 end.parse!
 
 if use_xephyr
-  x = y = 0
+  $x = $y = 0
   %w[DISPLAY HOME USER EDITOR VISUAL SHELL].each do |key|
     xephyr_env[key] = ENV[key]
   end
   xephyr_env["PATH"] = xephyr_path
-  record_display = xephyr_display
-  xinit_command = %W[xinit #{xinit_file} -- /usr/bin/Xephyr #{record_display} -dpi 96
-    -host-cursor -screen #{width}x#{height}
+  $record_display = xephyr_display
+  xinit_command = %W[xinit #{xinit_file} -- /usr/bin/Xephyr #{$record_display} -dpi 96
+    -host-cursor -screen #{$width}x#{$height}
   ]
   xinit_options = {
     :unsetenv_others => true
@@ -98,48 +105,105 @@ if use_xephyr
 end
 
 
-offset            = full ? "" : "+#{x},#{y}"
-video_input       = "#{record_display}#{offset}"
-geometry          = "#{width}x#{height}"
-geometry_options  = full ? %W[-s 1920x1080] : %W[-s #{geometry}]
-recording_options = %W[-f #{format}] + geometry_options +
-  %W[-i #{video_input} -r #{fps}]
-acodec_options    = default_codecs ? [] : %W[-acodec #{audio_codec}]
-vcodec_options    = default_codecs ? [] :
-  %W[-vcodec #{video_codec}] #  -vpre #{video_preset}
-audio_options     = acodec_options + %W[-f alsa -i #{audio_input}]
-video_options     = vcodec_options
-misc_options      = %W[-sameq -threads #{thread_count}]
-output_options    = [filename.to_s]
-ffmpeg_flags      = audio_options +
+def offset
+  $full ? "" : "+#{$x},#{$y}"
+end
+
+def video_input
+  "#{$record_display}#{offset}"
+end
+
+def geometry
+  "#{$width}x#{$height}"
+end
+
+def geometry_options
+  $full ? %W[-s 1920x1080] : %W[-s #{geometry}]
+end
+
+def recording_options
+  %W[-f #{$format}] + geometry_options + %W[-i #{video_input} -r #{$fps}]
+end
+
+def acodec_options
+  $default_codecs ? [] : %W[-acodec #{audio_codec}]
+end
+
+def vcodec_options
+  $default_codecs ? [] :
+    %W[-vcodec #{video_codec}] #  -vpre #{video_preset}
+end
+
+def audio_options
+  acodec_options + %W[-f alsa -i #{$audio_input}]
+end
+
+def video_options
+  vcodec_options
+end
+
+def misc_options
+  %W[-sameq -threads #{$thread_count}]
+end
+
+def output_options
+  [$filename.to_s]
+end
+
+def ffmpeg_flags
+  audio_options +
   recording_options +
   video_options +
   misc_options +
   output_options
-xephyr_flags      = %W[#{display} -ac -screen #{width}x#{height}]
-wmctrl_flags      = %W[-r :ACTIVE: -e 0,#{x},#{y},#{width},#{height-12}]
+end
 
-unless full
+xephyr_flags      = %W[#{display} -ac -screen #{$width}x#{$height}]
+wmctrl_flags      = %W[-r :ACTIVE: -e 0,#{$x},#{$y},#{$width},#{$height}]
+
+unless $full
   if pick
     # Lots of screen recorders let you pick a window to record. That's
     # not very useful to me, because I want to do recordings at a known,
     # consistent geometry (e.g. 1280x720). So instead, you pick a window
     # and the script resizes it and repositions it for recording.
     puts "Pick window:"
-    system "wmctrl", *%W[-a :SELECT:]
+    wmctrl_output, wmctrl_status =
+      Open3.capture2e("wmctrl", *%W[-v -a :SELECT:])
+    scan_results = wmctrl_output.scan(/Using window: 0x([[:xdigit:]]+)/)
+    win_id = scan_results.flatten.first.to_i(16)
     system "wmctrl", *wmctrl_flags
+
+    # ...but of course it's not that simple. Some programs will only
+    # resize by certain multiples. For instance, Emacs will only
+    # resize in multiples of the current character size. So now that
+    # the window has resized to approximately the desired size. we
+    # need to find out it's *exact* size.
+    info_results, info_status =
+      Open3.capture2e("xwininfo", *%W[-id #{win_id}])
+    win_stats = info_results.each_line.each_with_object({}) do
+      |line, stats|
+      fields = line.strip.split(/:\s*/)
+      stats[fields[0]] = fields[1]
+    end
+    $x      = win_stats["Absolute upper-left X"]
+    $y      = win_stats["Absolute upper-left Y"]
+    $width  = win_stats["Width"]
+    $height = win_stats["Height"]
   end
 end
 
-puts "Press <enter> to begin recording..."
-$stdin.gets
+if wait
+  puts "Press <enter> to begin recording..."
+  $stdin.gets
+end
 
 delay_seconds.downto(1) do |seconds_left|
   puts "Recording in #{seconds_left}..."
   sleep 1
 end
 
-system({"DISPLAY" => record_display}, "ffmpeg", *ffmpeg_flags)
+system({"DISPLAY" => $record_display}, "ffmpeg", *ffmpeg_flags)
 
 if xephyr_pid
   puts "Killing Xephyr"
@@ -150,5 +214,5 @@ end
 ENV["DISPLAY"] = root_display
 
 if show
-  system "cvlc", *%W[#{filename.to_s} --play-and-exit]
+  system "cvlc", *%W[#{$filename.to_s} --play-and-exit]
 end
