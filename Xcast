@@ -14,26 +14,33 @@ xephyr_bin        = (Pathname(__FILE__).dirname + "xephyr-bin").expand_path
 xephyr_path       = "#{xephyr_bin}:#{ENV['PATH']}"
 $full             = false
 $default_codecs   = true
-basename          = "screencast-" + Time.now.strftime("%Y%m%d-%H%M")
-dirname           = Pathname("#{ENV['HOME']}/screencasts")
-$filename         = dirname + Pathname("#{basename}.mp4")
+$name             = "screencast"
+$dirname          = Pathname("#{ENV['HOME']}/screencasts")
 $thread_count     = 6
 $fps              = 15
 $width            = 960
-$height           = 600
-$x                = 500
-$y                = 300
+$height           = 540
+$x                = 950
+$y                = 50
 $audio_input      = "pulse"
 $format           = "x11grab"
-video_codec       = "mpeg4"
-video_preset      = "lossless_ultrafast"
-audio_codec       = "pcm_s16le"
+$video_codec      = "mpeg4"
+$video_preset     = "lossless_ultrafast"
+$audio_codec      = "pcm_s16le"
 pick              = false
 delay_seconds     = 0
 show              = false
 wait              = false
 
 OptionParser.new do |opts|
+  opts.on("-d", "--directory=PATH", "Directory for recordings") do |value|
+    $dirname = Pathname(value)
+  end
+
+  opts.on("-n", "--name=NAME", "Name of recording") do |value|
+    $name = value
+  end
+
   opts.on("-f", "--[no-]full") do |value|
     $full = value
   end
@@ -41,7 +48,6 @@ OptionParser.new do |opts|
   opts.on("--[no-]wait") do |value|
     wait = value
   end
-
 
   opts.on("-p", "--pick") do |value|
     pick = value
@@ -55,11 +61,11 @@ OptionParser.new do |opts|
     $y = value
   end
 
-  opts.on("-w", "--width", Integer, "Recording area width") do |value|
+  opts.on("-w", "--width=PIXELS", Integer, "Recording area width") do |value|
     $width = value
   end
 
-  opts.on("-h", "--height", Integer, "Recording area height") do
+  opts.on("-h", "--height=PIXELS", Integer, "Recording area height") do
     |value|
     $height = value
   end
@@ -104,6 +110,13 @@ if use_xephyr
   xephyr_pid = Process.spawn(xephyr_env, *xinit_command, xinit_options)
 end
 
+def filename
+  $dirname + Pathname("#{basename}.mp4")
+end
+
+def basename
+  "#{$name}-" + Time.now.strftime("%Y%m%d-%H%M")
+end
 
 def offset
   $full ? "" : "+#{$x},#{$y}"
@@ -126,12 +139,12 @@ def recording_options
 end
 
 def acodec_options
-  $default_codecs ? [] : %W[-acodec #{audio_codec}]
+  $default_codecs ? [] : %W[-acodec #{$audio_codec}]
 end
 
 def vcodec_options
   $default_codecs ? [] :
-    %W[-vcodec #{video_codec}] #  -vpre #{video_preset}
+    %W[-vcodec #{$video_codec}] #  -vpre #{$video_preset}
 end
 
 def audio_options
@@ -143,11 +156,11 @@ def video_options
 end
 
 def misc_options
-  %W[-sameq -threads #{$thread_count}]
+  %W[-sameq -threads #{$thread_count} -strict experimental]
 end
 
 def output_options
-  [$filename.to_s]
+  [filename.to_s]
 end
 
 def ffmpeg_flags
@@ -203,6 +216,7 @@ delay_seconds.downto(1) do |seconds_left|
   sleep 1
 end
 
+puts "* ffmpeg #{ffmpeg_flags.join(' ')}"
 system({"DISPLAY" => $record_display}, "ffmpeg", *ffmpeg_flags)
 
 if xephyr_pid
