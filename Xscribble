@@ -1,10 +1,18 @@
 #!/usr/bin/env ruby
 # -*- coding: utf-8 -*-
+
+# Scribble: capture the contents of a window, then open it in a GIMP
+# editor window over top of the original. In effect, you can
+# "scribble" on the currently active window.
+
 require_relative 'xutils'
 
 include Xutils
 
+# TODO: The distinction between inner and outer window can probably be
+# removed.
 window_id        = ARGV.fetch(1) {
+  # use the current active window by default
   `xdotool getactivewindow`.strip
 }
 outer_id         = ARGV.fetch(2) {
@@ -15,17 +23,27 @@ output_filename  = "#{basename}.png"
 attributes       = xwininfo(window_id)
 width            = attributes["Width"].to_i
 height           = attributes["Height"].to_i
+
+# Discover the size of window manager decorations
 frame_extents    = `xprop -id #{outer_id} _NET_FRAME_EXTENTS`
   .split(/\s*=\s*/)
   .last
   .split(', ')
   .map(&:to_i)
 frame_left, frame_right, frame_top, frame_bottom = *frame_extents
+
+# The target coordinates need to take into account WM decorations.
+# TODO: we should really use the WM decorations of the Gimp window,
+# not the original window. However, in practice, the decorations are
+# exactly the same.
 x                = attributes["Absolute upper-left X"].to_i - frame_left
 y                = attributes["Absolute upper-left Y"].to_i - frame_top
 
+# Use imagemagick to capture the contents of the window to a file
 system("import", *%W[-window #{window_id} #{output_filename}])
 
+# Commands for xdotool
+# search --sync polls until the window appears
 window_commands = %W[
   search --sync --name #{basename}
   windowmove #{x} #{y}
@@ -33,9 +51,14 @@ window_commands = %W[
   windowraise
 ]
 
+# A specialized GIMP config that disables all window clutter so that
+# the window size will be exactly the same as the original window.
 gimprc_path = File.realpath("../xcap.gimprc", __FILE__)
 gimp_flags  = %W[-g #{gimprc_path} --session=Xcap #{output_filename}]
+
+# Open the GIMP window
 gimp_pid    = Process.spawn("gimp", *gimp_flags)
 Process.detach(gimp_pid)
 
+# Focus and position the GIMP window precisely over the original window
 system("xdotool", *window_commands)
