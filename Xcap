@@ -1,0 +1,42 @@
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
+require_relative 'xutils'
+
+include Xutils
+
+unless ARGV.size == 2
+  abort "Usage: CLIENT_WINDOW_ID OUTER_WINDOW_ID"
+end
+
+window_id        = ARGV[0]
+outer_id         = ARGV[1]
+basename         = Time.now.strftime("screencap-%Y%m%dT%H%M%S")
+output_filename  = "#{basename}.png"
+attributes       = xwininfo(window_id)
+width            = attributes["Width"].to_i
+height           = attributes["Height"].to_i
+frame_extents    = `xprop -id #{outer_id} _NET_FRAME_EXTENTS`
+  .split(/\s*=\s*/)
+  .last
+  .split(', ')
+  .map(&:to_i)
+frame_left, frame_right, frame_top, frame_bottom = *frame_extents
+x                = attributes["Absolute upper-left X"].to_i - frame_left
+y                = attributes["Absolute upper-left Y"].to_i - frame_top
+
+system("import", *%W[-window #{window_id} #{output_filename}])
+
+window_commands = %W[
+  search --sync --name #{basename}
+  windowmove #{x} #{y}
+  windowfocus
+  windowraise
+]
+
+gimprc_path = File.realpath("../xcap.gimprc", __FILE__)
+gimp_flags  = %W[-g #{gimprc_path} --session=Xcap #{output_filename}]
+gimp_pid    = Process.spawn("gimp", *gimp_flags)
+Process.detach(gimp_pid)
+
+system("xdotool", *window_commands)
+#
