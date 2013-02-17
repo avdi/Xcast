@@ -1,0 +1,13 @@
+(default-view
+    (show-menubar no)
+    (show-statusbar no)
+    (show-rulers no)
+    (show-scrollbars no)
+    (show-selection yes)
+    (show-layer-boundary no)
+    (show-guides no)
+    (show-grid no)
+    (show-sample-points yes)
+    (padding-mode default)
+    (padding-color (color-rgb 1.000000 1.000000 1.000000)))
+
