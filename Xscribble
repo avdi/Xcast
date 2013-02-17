@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # -*- coding: utf-8 -*-
 
-# Scribble: capture the contents of a window, then open it in a GIMP
+# Xscribble: capture the contents of a window, then open it in a GIMP
 # editor window over top of the original. In effect, you can
 # "scribble" on the currently active window.
 
