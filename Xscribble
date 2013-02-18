@@ -18,8 +18,8 @@ window_id        = ARGV.fetch(1) {
 outer_id         = ARGV.fetch(2) {
   window_id
 }
-basename         = Time.now.strftime("screencap-%Y%m%dT%H%M%S")
-output_filename  = "#{basename}.png"
+basename         = Time.now.strftime("xscribble-screencap-%Y%m%dT%H%M%S")
+output_filename  = "/tmp/#{basename}.png"
 attributes       = xwininfo(window_id)
 width            = attributes["Width"].to_i
 height           = attributes["Height"].to_i
@@ -49,12 +49,17 @@ window_commands = %W[
   windowmove #{x} #{y}
   windowfocus
   windowraise
+  key ctrl+shift+n
+  search --sync #{'New Layer'}
+  key s c r i b b l e Return
 ]
 
 # A specialized GIMP config that disables all window clutter so that
 # the window size will be exactly the same as the original window.
 gimprc_path = File.realpath("../xcap.gimprc", __FILE__)
-gimp_flags  = %W[-g #{gimprc_path} --session=Xcap #{output_filename}]
+gimp_flags  = %W[-g #{gimprc_path} --session=Xcap #{output_filename}
+                 --as-new
+]
 
 # Open the GIMP window
 gimp_pid    = Process.spawn("gimp", *gimp_flags)
