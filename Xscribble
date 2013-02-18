@@ -52,6 +52,7 @@ window_commands = %W[
   key ctrl+shift+n
   search --sync #{'New Layer'}
   key s c r i b b l e Return
+  key p
 ]
 
 # A specialized GIMP config that disables all window clutter so that
