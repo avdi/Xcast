@@ -110,6 +110,11 @@ if use_xephyr
   xephyr_pid = Process.spawn(xephyr_env, *xinit_command, xinit_options)
 end
 
+def display_dimensions
+  `xdpyinfo -display #{$record_display}` =~ /dimensions:\s+(\d+)x(\d+) pixels/
+  [$1, $2]
+end
+
 def filename
   $dirname + Pathname("#{basename}.mp4")
 end
@@ -127,11 +132,16 @@ def video_input
 end
 
 def geometry
-  "#{$width}x#{$height}"
+  if $full
+    width, height = display_dimensions
+    "#{width}x#{height}"
+  else
+    "#{$width}x#{$height}"
+  end
 end
 
 def geometry_options
-  $full ? %W[-s 1920x1080] : %W[-s #{geometry}]
+  %W[-s #{geometry}]
 end
 
 def recording_options
